@@ -125,6 +125,12 @@
     gap:12px;
     flex-wrap:wrap;
   }
+  .controls .controls-left{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+  }
   .controls .search{
     border:1px solid var(--line);
     border-radius:6px;
@@ -135,6 +141,28 @@
   }
   .controls .search:focus{outline:2px solid var(--focus);outline-offset:1px;}
   .controls .hint{font-size:12px;color:var(--ink-soft);}
+  .metric-toggle{
+    display:inline-flex;
+    border:1px solid var(--line);
+    border-radius:6px;
+    overflow:hidden;
+  }
+  .metric-toggle .metric-btn{
+    border:none;
+    background:var(--card);
+    color:var(--ink-soft);
+    font-size:12.5px;
+    padding:7px 12px;
+    cursor:pointer;
+    border-right:1px solid var(--line);
+  }
+  .metric-toggle .metric-btn:last-child{border-right:none;}
+  .metric-toggle .metric-btn:hover{background:var(--accent-soft);}
+  .metric-toggle .metric-btn.active{
+    background:var(--ink);
+    color:#fff;
+    font-weight:600;
+  }
 
   /* table */
   table.fac-table{
@@ -244,7 +272,14 @@
   <div class="summary" id="summaryBox"></div>
 
   <div class="controls">
-    <input type="text" class="search" id="searchInput" placeholder="시설명 검색">
+    <div class="controls-left">
+      <input type="text" class="search" id="searchInput" placeholder="시설명 검색">
+      <div class="metric-toggle" id="metricToggle">
+        <button type="button" class="metric-btn" data-metric="both">전체</button>
+        <button type="button" class="metric-btn" data-metric="qty">수량</button>
+        <button type="button" class="metric-btn" data-metric="rev">매출</button>
+      </div>
+    </div>
     <div class="hint">행을 클릭하면 제품별 상세가 펼쳐집니다</div>
   </div>
 
@@ -283,6 +318,27 @@ const MRD_DATA = {"months": ["202604", "202605", "202606", "202607"], "team": ["
   let sortDir = -1;
   let expandedFacility = null;
   let searchTerm = '';
+  let metric = 'both'; // 'both' | 'qty' | 'rev'
+
+  function colsPerMonth(){ return metric === 'both' ? 2 : 1; }
+  function showQty(){ return metric === 'both' || metric === 'qty'; }
+  function showRev(){ return metric === 'both' || metric === 'rev'; }
+  function tableColSpan(){ return 1 + months.length*colsPerMonth() + (months.length>1?1:0); }
+
+  const metricToggle = document.getElementById('metricToggle');
+  Array.from(metricToggle.children).forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      metric = btn.dataset.metric;
+      Array.from(metricToggle.children).forEach(b=>b.classList.toggle('active', b===btn));
+      // reset sort key if it no longer applies
+      const lastM = months[months.length-1];
+      if(metric === 'qty') sortKey = lastM + '_qty';
+      else if(metric === 'rev') sortKey = lastM + '_rev';
+      renderHead();
+      renderTable();
+    });
+  });
+  metricToggle.children[0].classList.add('active');
 
   const repRow = document.getElementById('repRow');
   team.forEach(rep=>{
@@ -381,16 +437,20 @@ const MRD_DATA = {"months": ["202604", "202605", "202606", "202607"], "team": ["
     tr.appendChild(th0);
 
     months.forEach((m,i)=>{
-      const thQ = document.createElement('th');
-      thQ.textContent = monthShort(m)+' 수량';
-      thQ.dataset.key = m+'_qty';
-      if(i>0) thQ.classList.add('group-start');
-      tr.appendChild(thQ);
-
-      const thR = document.createElement('th');
-      thR.textContent = monthShort(m)+' 매출';
-      thR.dataset.key = m+'_rev';
-      tr.appendChild(thR);
+      if(showQty()){
+        const thQ = document.createElement('th');
+        thQ.textContent = monthShort(m)+' 수량';
+        thQ.dataset.key = m+'_qty';
+        if(i>0) thQ.classList.add('group-start');
+        tr.appendChild(thQ);
+      }
+      if(showRev()){
+        const thR = document.createElement('th');
+        thR.textContent = monthShort(m)+' 매출';
+        thR.dataset.key = m+'_rev';
+        if(i>0 && !showQty()) thR.classList.add('group-start');
+        tr.appendChild(thR);
+      }
     });
 
     if(months.length>1){
@@ -438,7 +498,7 @@ const MRD_DATA = {"months": ["202604", "202605", "202606", "202607"], "team": ["
     if(rows.length === 0){
       const tr = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = 2 + months.length*2;
+      td.colSpan = tableColSpan();
       td.className = 'empty-note';
       td.textContent = '표시할 시설이 없습니다.';
       tr.appendChild(td);
@@ -450,8 +510,8 @@ const MRD_DATA = {"months": ["202604", "202605", "202606", "202607"], "team": ["
       if(r.name === expandedFacility) tr.classList.add('expanded');
       let html = '<td class="name">'+r.name+'</td>';
       months.forEach(m=>{
-        html += '<td>'+fmtInt(r[m+'_qty'])+'</td>';
-        html += '<td>'+fmtWon(r[m+'_rev'])+'</td>';
+        if(showQty()) html += '<td>'+fmtInt(r[m+'_qty'])+'</td>';
+        if(showRev()) html += '<td>'+fmtWon(r[m+'_rev'])+'</td>';
       });
       if(months.length>1){
         if(r.diffPct === null){
@@ -481,7 +541,7 @@ const MRD_DATA = {"months": ["202604", "202605", "202606", "202607"], "team": ["
     const tr = document.createElement('tr');
     tr.className = 'detail-row';
     const td = document.createElement('td');
-    td.colSpan = 2 + months.length*2;
+    td.colSpan = tableColSpan();
 
     const prods = (getRepData().products[facName] || []);
     // group by product name
@@ -492,7 +552,10 @@ const MRD_DATA = {"months": ["202604", "202605", "202606", "202607"], "team": ["
     });
 
     let inner = '<div class="detail-inner"><table><thead><tr><th>제품명</th>';
-    months.forEach(m=>{ inner += '<th>'+monthShort(m)+' 수량</th><th>'+monthShort(m)+' 매출</th>'; });
+    months.forEach(m=>{
+      if(showQty()) inner += '<th>'+monthShort(m)+' 수량</th>';
+      if(showRev()) inner += '<th>'+monthShort(m)+' 매출</th>';
+    });
     inner += '</tr></thead><tbody>';
 
     const prodNames = Object.keys(byProduct).sort((a,b)=>{
@@ -503,14 +566,15 @@ const MRD_DATA = {"months": ["202604", "202605", "202606", "202607"], "team": ["
     });
 
     if(prodNames.length === 0){
-      inner += '<tr><td colspan="'+(1+months.length*2)+'" style="text-align:center;color:var(--ink-soft);">제품 상세 데이터 없음</td></tr>';
+      inner += '<tr><td colspan="'+(1+months.length*colsPerMonth())+'" style="text-align:center;color:var(--ink-soft);">제품 상세 데이터 없음</td></tr>';
     }
 
     prodNames.forEach(pname=>{
       inner += '<tr><td>'+pname+'</td>';
       months.forEach(m=>{
         const cell = byProduct[pname][m] || {qty:0, rev:0};
-        inner += '<td>'+fmtInt(cell.qty)+'</td><td>'+fmtWon(cell.rev)+'</td>';
+        if(showQty()) inner += '<td>'+fmtInt(cell.qty)+'</td>';
+        if(showRev()) inner += '<td>'+fmtWon(cell.rev)+'</td>';
       });
       inner += '</tr>';
     });
@@ -527,7 +591,8 @@ const MRD_DATA = {"months": ["202604", "202605", "202606", "202607"], "team": ["
     months.forEach(m=>{
       const q = rows.reduce((s,r)=>s+r[m+'_qty'],0);
       const rv = rows.reduce((s,r)=>s+r[m+'_rev'],0);
-      html += '<td>'+fmtInt(q)+'</td><td>'+fmtWon(rv)+'</td>';
+      if(showQty()) html += '<td>'+fmtInt(q)+'</td>';
+      if(showRev()) html += '<td>'+fmtWon(rv)+'</td>';
     });
     if(months.length>1){
       const lastM = months[months.length-1], prevM = months[months.length-2];
@@ -548,7 +613,8 @@ const MRD_DATA = {"months": ["202604", "202605", "202606", "202607"], "team": ["
     Array.from(repRow.children).forEach(b=>{
       b.classList.toggle('active', b.dataset.rep === currentRep);
     });
-    sortKey = months[months.length-1] + '_rev';
+    const lastM = months[months.length-1];
+    sortKey = metric === 'qty' ? (lastM+'_qty') : (lastM+'_rev');
     sortDir = -1;
     renderSummary();
     renderHead();
