@@ -312,6 +312,14 @@ const MRD_DATA = {"months": ["202604", "202605", "202606", "202607"], "team": ["
   }
   function fmtInt(n){ return n.toLocaleString('ko-KR'); }
   function fmtWon(n){ return n.toLocaleString('ko-KR') + '원'; }
+  function isKeyProduct(name){
+    if(name.includes('아이커비스')) return true;
+    if(name.includes('알레지온엘엑스')) return true;
+    if(name.includes('코솝-에스')) return true;
+    if(name.includes('에이베리스') && name.includes('(1회용)')) return true;
+    if(name.includes('타프콤') && name.includes('(1회용)')) return true;
+    return false;
+  }
 
   let currentRep = team[0];
   let sortKey = months[months.length-1] + '_rev';
@@ -570,7 +578,8 @@ const MRD_DATA = {"months": ["202604", "202605", "202606", "202607"], "team": ["
     }
 
     prodNames.forEach(pname=>{
-      inner += '<tr><td>'+pname+'</td>';
+      const nameCell = isKeyProduct(pname) ? '<strong>'+pname+'</strong>' : pname;
+      inner += '<tr><td>'+nameCell+'</td>';
       months.forEach(m=>{
         const cell = byProduct[pname][m] || {qty:0, rev:0};
         if(showQty()) inner += '<td>'+fmtInt(cell.qty)+'</td>';
